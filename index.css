@@ -1,6 +1,78 @@
-html, body, canvas {
-  width:  100%;
-  height: 99%;
+* {
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+}
+
+.menu-bar {
+  height: 50px;
+  background-color: #333;
+  color: white;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  position: relative;
+  z-index: 10;
+}
+
+.menu-item {
+  position: relative;
+}
+
+.menu-bar a {
+  color: white;
+  text-decoration: none;
+  margin-right: 20px;
+  font-size: 16px;
+  display: inline-block;
+  padding: 10px 15px;
+}
+
+.menu-bar a:hover {
+  text-decoration: underline;
+}
+
+.dropdown {
+  display: none;
+  position: absolute;
+  background-color: #444;
+  padding: 10px 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+}
+
+.dropdown a {
+  display: block;
+  padding: 10px 20px;
+  color: white;
+  text-decoration: none;
+}
+
+.dropdown a:hover {
+  background-color: #555;
+}
+
+.menu-item:hover .dropdown {
+  display: block;
+  opacity: 1;
+  top: 30px;
+}
+
+.canvas-container {
+  height: calc(100% - 50px);
+  width: 100%;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }

@@ -2,7 +2,7 @@ var canvas
 /**@type {CanvasRenderingContext2D} */
 var ctx
 
-var notes = []
+var notes = {}
 // relative to center of screen
 var rx = -10, ry = 0
 var hw = 1, hh = 0
@@ -14,6 +14,22 @@ var dragrx = 0, dragry = 0
 var scale = 1
 
 var frameUpdate = false
+
+
+var menuOpen = false
+const MENU_FONT = "20px Verdana"
+var menuOptions = [
+    {
+        "label": "New",
+        "press": function () { }
+    },
+    {
+        "label": "AIODFJSJFiJSDOfjsaojfojdfjadisjfojosdf"
+    },
+    {
+        "label": "eeeeee"
+    }
+]
 
 const FONT_STYLE = "px Verdana"
 const FONT_SIZE = 20
@@ -41,13 +57,17 @@ function screenToWorld(sx, sy) {
 
 function newNote() {
     let [x, y] = screenToWorld(hw, hh)
-    return {
+    let note = {
         "x": x,
         "y": y,
         "w": 100,
         "h": 100,
-        "label": "Hello World"
+        "label": "Hello World",
+        "id": crypto.randomUUID(),
+        "connections": []
     }
+    notes[note.id] = note
+    return note
 }
 
 function drawPin(x, y) {
@@ -69,25 +89,43 @@ function drawPin(x, y) {
     ctx.fillStyle = "black"
 }
 
+function drawBorderAroundNote(note) {
+    var [x, y] = worldToScreen(note.x, note.y)
+    ctx.fillStyle = NOTE_HIGHLIGHT
+    ctx.strokeStyle = NOTE_HIGHLIGHT
+    ctx.lineWidth = 2
+    ctx.strokeRect(x, y, (note.w + NOTE_PADDING) * scale, (note.h + NOTE_PADDING) * scale)
+    ctx.lineWidth = 1
+}
+
 function drawNote(note) {
     var [x, y] = worldToScreen(note.x, note.y)
     if (note == selectedNote) {
-        ctx.fillStyle = NOTE_HIGHLIGHT
-        ctx.strokeStyle = NOTE_HIGHLIGHT
-        ctx.lineWidth = 2
-        ctx.strokeRect(x, y, (note.w + NOTE_PADDING) * scale, (note.h + NOTE_PADDING) * scale)
-
+        drawBorderAroundNote(note)
     }
     ctx.fillStyle = NOTE_SECONDARY
     ctx.fillRect(x, y, (note.w + NOTE_PADDING) * scale, (note.h + NOTE_PADDING) * scale)
     ctx.fillStyle = NOTE_PRIMARY
     ctx.fillRect(x, y, note.w * scale, note.h * scale)
 
-    drawPin(note.x + note.w / 2, note.y)
-
+    ctx.fillStyle = "black"
     const fontHeight = FONT_SIZE * scale
     ctx.font = fontHeight + FONT_STYLE
     ctx.fillText(note.label, x, y + fontHeight + PIN_SIZE * scale, note.w * scale)
+}
+
+function drawYarnConnections(note) {
+    let [fx, fy] = worldToScreen(note.x + note.w / 2, note.y)
+    ctx.strokeStyle = "red"
+    ctx.lineWidth = 2
+    for (let i = 0; i < note.connections.length; i++) {
+        ctx.beginPath()
+        ctx.moveTo(fx, fy)
+        let cnote = notes[note.connections[i]]
+        let [tx, ty] = worldToScreen(cnote.x + cnote.w / 2, cnote.y)
+        ctx.lineTo(tx, ty)
+        ctx.stroke()
+    }
 }
 
 function drawRoot() {
@@ -97,13 +135,44 @@ function drawRoot() {
     ctx.fillRect(x, y - 2, 1, 5)
 }
 
+function drawMenu(x, y, options) {
+    var width = 10
+    var optionHeight = 10
+    ctx.font = MENU_FONT
+    var metrics = []
+    for (var i = 0; i < options.length; i++) {
+        var option = options[i]
+        metrics[i] = ctx.measureText(option.label)
+        optionHeight = Math.max(metrics[i].emHeightAscent + metrics[i].emHeightDescent, optionHeight)
+        width = Math.max(width, metrics[i].width)
+    }
+    console.log(optionHeight)
+    ctx.fillStyle = "white"
+    ctx.fillRect(x, y, width, optionHeight * options.length)
+    for (var i = 0; i < options.length; i++) {
+        var option = options[i]
+        var ty = y + i * optionHeight
+        options[i].dy = i * optionHeight
+        ctx.strokeStyle = "black"
+        ctx.strokeRect(x, ty, width, optionHeight)
+        ctx.fillStyle = "black"
+        ctx.fillText(option.label, x, ty + optionHeight - metrics[i].emHeightDescent)
+    }
+}
+
 function draw() {
     ctx.canvas.width = window.innerWidth
     hw = ctx.canvas.width / 2
     ctx.canvas.height = window.innerHeight
     hh = ctx.canvas.height / 2
     drawRoot()
-    notes.forEach(drawNote)
+    for (let [key, note] of Object.entries(notes)) {
+        drawNote(note)
+    }
+    for (let [key, note] of Object.entries(notes)) {
+        drawYarnConnections(note)
+        drawPin(note.x + note.w / 2, note.y)
+    }
 }
 
 function animate() {
@@ -114,10 +183,17 @@ function animate() {
     requestAnimationFrame(animate)
 }
 
-notes[0] = newNote()
+let a = newNote()
+let b = newNote()
+
+a.connections[0] = b.id
+
+function withinRectangle(x, y, x1, y1, w, h) {
+    return x >= x1 && y >= y1 && x <= x1 + w && y <= y1 + h
+}
 
 function isOnNote(note, x, y) {
-    return x >= note.x && y >= note.y && x <= note.x + note.w && y <= note.y + note.h
+    return withinRectangle(x, y, note.x, note.y, note.w, note.h)
 }
 
 window.onload = function () {
@@ -139,8 +215,7 @@ window.onload = function () {
 
     canvas.addEventListener("mousedown", (e) => {
         var [wx, wy] = screenToWorld(e.x, e.y)
-        for (var i = 0; i < notes.length; i++) {
-            var note = notes[i]
+        for (let [key, note] of Object.entries(notes)) {
             if (isOnNote(note, wx, wy)) {
                 draggingNote = true
                 selectedNote = note
@@ -178,6 +253,11 @@ window.onload = function () {
     canvas.addEventListener("contextmenu", (e) => {
         e.preventDefault()
     })
+
+    document.getElementById("insertNoteButton").onclick = function () {
+        notes[notes.length] = newNote()
+        frameUpdate = true
+    }
 
     requestAnimationFrame(animate)
 }
