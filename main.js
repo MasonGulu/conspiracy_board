@@ -10,6 +10,7 @@ var draggingView = false
 var dragx = 0, dragy = 0
 var draggingNote = false
 var selectedNote
+var hoveredNote
 var dragrx = 0, dragry = 0
 var scale = 1
 
@@ -38,7 +39,8 @@ const NOTE_PADDING = 3
 const NOTE_PRIMARY = "#f5eb92"
 const NOTE_SECONDARY = "#ebe15d"
 const NOTE_HIGHLIGHT_PAD = 5
-const NOTE_HIGHLIGHT = "black"
+const NOTE_SELECTED = "black"
+const NOTE_HOVERED = "yellow"
 
 const PIN_SIZE = 10
 const PIN_SECOND_SIZE = 8
@@ -53,6 +55,14 @@ function worldToScreen(wx, wy) {
 
 function screenToWorld(sx, sy) {
     return [(sx - hw) / scale - rx, (sy - hh) / scale - ry]
+}
+
+function adjustForCanvasPos(cx, cy) {
+    const rect = canvas.getBoundingClientRect()
+    const x = cx - rect.left
+    const y = cy - rect.top / 2
+
+    return [x, y]
 }
 
 function newNote() {
@@ -91,9 +101,7 @@ function drawPin(x, y) {
 
 function drawBorderAroundNote(note) {
     var [x, y] = worldToScreen(note.x, note.y)
-    ctx.fillStyle = NOTE_HIGHLIGHT
-    ctx.strokeStyle = NOTE_HIGHLIGHT
-    ctx.lineWidth = 2
+    ctx.lineWidth = 4
     ctx.strokeRect(x, y, (note.w + NOTE_PADDING) * scale, (note.h + NOTE_PADDING) * scale)
     ctx.lineWidth = 1
 }
@@ -101,6 +109,12 @@ function drawBorderAroundNote(note) {
 function drawNote(note) {
     var [x, y] = worldToScreen(note.x, note.y)
     if (note == selectedNote) {
+        ctx.fillStyle = NOTE_SELECTED
+        ctx.strokeStyle = NOTE_SELECTED
+        drawBorderAroundNote(note)
+    } else if (note == hoveredNote) {
+        ctx.fillStyle = NOTE_HOVERED
+        ctx.strokeStyle = NOTE_HOVERED
         drawBorderAroundNote(note)
     }
     ctx.fillStyle = NOTE_SECONDARY
@@ -126,6 +140,7 @@ function drawYarnConnections(note) {
         ctx.lineTo(tx, ty)
         ctx.stroke()
     }
+    ctx.lineWidth = 1
 }
 
 function drawRoot() {
@@ -146,7 +161,6 @@ function drawMenu(x, y, options) {
         optionHeight = Math.max(metrics[i].emHeightAscent + metrics[i].emHeightDescent, optionHeight)
         width = Math.max(width, metrics[i].width)
     }
-    console.log(optionHeight)
     ctx.fillStyle = "white"
     ctx.fillRect(x, y, width, optionHeight * options.length)
     for (var i = 0; i < options.length; i++) {
@@ -192,6 +206,7 @@ function withinRectangle(x, y, x1, y1, w, h) {
     return x >= x1 && y >= y1 && x <= x1 + w && y <= y1 + h
 }
 
+// Give x and y in worldspace
 function isOnNote(note, x, y) {
     return withinRectangle(x, y, note.x, note.y, note.w, note.h)
 }
@@ -214,7 +229,8 @@ window.onload = function () {
     })
 
     canvas.addEventListener("mousedown", (e) => {
-        var [wx, wy] = screenToWorld(e.x, e.y)
+        var [cx, cy] = adjustForCanvasPos(e.x, e.y)
+        var [wx, wy] = screenToWorld(cx, cy)
         for (let [key, note] of Object.entries(notes)) {
             if (isOnNote(note, wx, wy)) {
                 draggingNote = true
@@ -225,25 +241,44 @@ window.onload = function () {
                 return
             }
         }
-        dragx = e.x
-        dragy = e.y
+        dragx = cx
+        dragy = cy
         selectedNote = null
         draggingView = true
         dragrx = rx
         dragry = ry
     })
+
+
     canvas.addEventListener("mousemove", (e) => {
+        let [cx, cy] = adjustForCanvasPos(e.x, e.y)
         if (draggingView) {
-            rx = dragrx + (e.x - dragx) / scale
-            ry = dragry + (e.y - dragy) / scale
+            rx = dragrx + (cx - dragx) / scale
+            ry = dragry + (cy - dragy) / scale
             frameUpdate = true
         } else if (draggingNote) {
-            var [nx, ny] = screenToWorld(e.x, e.y)
+            var [nx, ny] = screenToWorld(cx, cy)
             selectedNote.x = nx - dragx
             selectedNote.y = ny - dragy
             frameUpdate = true
+        } else {
+            var [wx, wy] = screenToWorld(cx, cy)
+            for (let [key, note] of Object.entries(notes)) {
+                if (isOnNote(note, wx, wy)) {
+                    if (hoveredNote != note) {
+                        hoveredNote = note
+                        frameUpdate = true
+                    }
+                    return
+                }
+            }
+            if (hoveredNote != null) {
+                hoveredNote = null
+                frameUpdate = true
+            }
         }
     })
+
     canvas.addEventListener("mouseup", (e) => {
         draggingView = false
         draggingNote = false
@@ -259,9 +294,19 @@ window.onload = function () {
         frameUpdate = true
     }
 
+    document.getElementById("labelButton").onclick = function () {
+        if (selectedNote != null) {
+            let nlabel = window.prompt("Note Label", selectedNote.label)
+            selectedNote.label = nlabel
+            frameUpdate = true
+        }
+    }
+
     requestAnimationFrame(animate)
 }
 
 window.onresize = function () {
     draw()
 }
+
+
