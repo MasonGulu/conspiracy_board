@@ -1,6 +1,8 @@
 var canvas
 /**@type {CanvasRenderingContext2D} */
 var ctx
+var canvasDiv
+var backgroundImage
 
 var notes = {}
 // relative to center of screen
@@ -9,6 +11,7 @@ var hw = 1, hh = 0
 var draggingView = false
 var dragx = 0, dragy = 0
 var draggingNote = false
+var makingConnection = false
 var selectedNote
 var hoveredNote
 var dragrx = 0, dragry = 0
@@ -33,7 +36,9 @@ var menuOptions = [
 ]
 
 const FONT_STYLE = "px Verdana"
-const FONT_SIZE = 20
+const FONT_SIZE = 16
+
+const BACKGROUND_SCALING = 0.2
 
 const NOTE_PADDING = 3
 const NOTE_PRIMARY = "#f5eb92"
@@ -60,9 +65,28 @@ function screenToWorld(sx, sy) {
 function adjustForCanvasPos(cx, cy) {
     const rect = canvas.getBoundingClientRect()
     const x = cx - rect.left
-    const y = cy - rect.top / 2
+    const y = cy - rect.top
 
     return [x, y]
+}
+
+function wrapText(text, maxWidth) {
+    var words = text.split(" ");
+    var lines = [];
+    var currentLine = words[0];
+
+    for (var i = 1; i < words.length; i++) {
+        var word = words[i];
+        var width = ctx.measureText(currentLine + " " + word).width;
+        if (width < maxWidth) {
+            currentLine += " " + word;
+        } else {
+            lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    lines.push(currentLine);
+    return lines;
 }
 
 function newNote() {
@@ -106,6 +130,15 @@ function drawBorderAroundNote(note) {
     ctx.lineWidth = 1
 }
 
+function drawTextLines(x, y, text, height, width) {
+    for (var i = 0; i < text.length; i++) {
+        var s = text[i]
+        metrics = ctx.measureText(s)
+        var ty = y + i * height
+        ctx.fillText(s, x, ty - metrics.emHeightDescent, width)
+    }
+}
+
 function drawNote(note) {
     var [x, y] = worldToScreen(note.x, note.y)
     if (note == selectedNote) {
@@ -125,22 +158,28 @@ function drawNote(note) {
     ctx.fillStyle = "black"
     const fontHeight = FONT_SIZE * scale
     ctx.font = fontHeight + FONT_STYLE
-    ctx.fillText(note.label, x, y + fontHeight + PIN_SIZE * scale, note.w * scale)
+    let lines = wrapText(note.label, note.w * scale)
+    drawTextLines(x, y + fontHeight + PIN_SIZE * scale, lines, fontHeight, note.w * scale)
+    // ctx.fillText(note.label, x, y + fontHeight + PIN_SIZE * scale, note.w * scale)
+}
+
+function drawYarn(x1, y1, x2, y2) {
+    ctx.strokeStyle = "red"
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.stroke()
+    ctx.lineWidth = 1
 }
 
 function drawYarnConnections(note) {
     let [fx, fy] = worldToScreen(note.x + note.w / 2, note.y)
-    ctx.strokeStyle = "red"
-    ctx.lineWidth = 2
     for (let i = 0; i < note.connections.length; i++) {
-        ctx.beginPath()
-        ctx.moveTo(fx, fy)
         let cnote = notes[note.connections[i]]
         let [tx, ty] = worldToScreen(cnote.x + cnote.w / 2, cnote.y)
-        ctx.lineTo(tx, ty)
-        ctx.stroke()
+        drawYarn(fx, fy, tx, ty)
     }
-    ctx.lineWidth = 1
 }
 
 function drawRoot() {
@@ -174,17 +213,48 @@ function drawMenu(x, y, options) {
     }
 }
 
+function roundMultiple(x, m) {
+    return Math.ceil(x / m) * m
+}
+
+function drawBackground() {
+    let w = backgroundImage.width * BACKGROUND_SCALING
+    let h = backgroundImage.height * BACKGROUND_SCALING
+    let scaledW = w * scale
+    let scaledH = h * scale
+    let [wx, wy] = screenToWorld(-scaledW, -scaledH)
+    let mx = roundMultiple(wx, w)
+    let my = roundMultiple(wy, h)
+    let [cornerX, cornerY] = worldToScreen(mx, my)
+    let copiesWide = 1 + Math.ceil(ctx.canvas.width / scaledW)
+    let copiesTall = 1 + Math.ceil(ctx.canvas.height / scaledH)
+    for (let y = 0; y < copiesTall; y++) {
+        for (let x = 0; x < copiesWide; x++) {
+            let ix = Math.floor(cornerX + scaledW * x)
+            let iy = Math.floor(cornerY + scaledH * y)
+            ctx.drawImage(backgroundImage, ix, iy, Math.ceil(scaledW), Math.ceil(scaledH))
+        }
+    }
+}
+
 function draw() {
-    ctx.canvas.width = window.innerWidth
+    ctx.canvas.width = canvasDiv.clientWidth
     hw = ctx.canvas.width / 2
-    ctx.canvas.height = window.innerHeight
+    ctx.canvas.height = canvasDiv.clientHeight
     hh = ctx.canvas.height / 2
+    drawBackground()
     drawRoot()
     for (let [key, note] of Object.entries(notes)) {
         drawNote(note)
     }
+    if (makingConnection) {
+        let [fx, fy] = worldToScreen(selectedNote.x + selectedNote.w / 2, selectedNote.y)
+        drawYarn(fx, fy, dragx, dragy)
+    }
     for (let [key, note] of Object.entries(notes)) {
         drawYarnConnections(note)
+    }
+    for (let [key, note] of Object.entries(notes)) {
         drawPin(note.x + note.w / 2, note.y)
     }
 }
@@ -211,9 +281,46 @@ function isOnNote(note, x, y) {
     return withinRectangle(x, y, note.x, note.y, note.w, note.h)
 }
 
+function updateHover(e) {
+    var [cx, cy] = adjustForCanvasPos(e.x, e.y)
+    var [wx, wy] = screenToWorld(cx, cy)
+    for (let [key, note] of Object.entries(notes)) {
+        if (isOnNote(note, wx, wy)) {
+            if (hoveredNote != note) {
+                hoveredNote = note
+                frameUpdate = true
+            }
+            return
+        }
+    }
+    if (hoveredNote != null) {
+        hoveredNote = null
+        frameUpdate = true
+    }
+}
+
+function removeConnection(a, b) {
+    for (let i = 0; i < a.connections.length; i++) {
+        let cid = a.connections[i]
+        if (cid == b.id) {
+            a.connections.splice(i, 1)
+            return true
+        }
+    }
+    for (let j = 0; j < b.connections.length; j++) {
+        let cid = b.connections[j]
+        if (cid == a.id) {
+            b.connections.splice(j, 1)
+            return true
+        }
+    }
+}
+
 window.onload = function () {
     canvas = document.getElementById("mainCanvas")
+    canvasDiv = document.getElementById("canvasContainer")
     ctx = canvas.getContext("2d")
+    backgroundImage = document.getElementById("backgroundImage")
     draw()
 
     canvas.addEventListener("wheel", function (e) {
@@ -231,15 +338,19 @@ window.onload = function () {
     canvas.addEventListener("mousedown", (e) => {
         var [cx, cy] = adjustForCanvasPos(e.x, e.y)
         var [wx, wy] = screenToWorld(cx, cy)
-        for (let [key, note] of Object.entries(notes)) {
-            if (isOnNote(note, wx, wy)) {
+        if (hoveredNote != null) {
+            selectedNote = hoveredNote
+            if (e.button == 0) {
                 draggingNote = true
-                selectedNote = note
-                frameUpdate = true
-                dragx = wx - note.x
-                dragy = wy - note.y
-                return
+                dragx = wx - selectedNote.x
+                dragy = wy - selectedNote.y
+            } else {
+                makingConnection = true
+                dragx = cx
+                dragy = cy
             }
+            frameUpdate = true
+            return
         }
         dragx = cx
         dragy = cy
@@ -261,27 +372,21 @@ window.onload = function () {
             selectedNote.x = nx - dragx
             selectedNote.y = ny - dragy
             frameUpdate = true
-        } else {
-            var [wx, wy] = screenToWorld(cx, cy)
-            for (let [key, note] of Object.entries(notes)) {
-                if (isOnNote(note, wx, wy)) {
-                    if (hoveredNote != note) {
-                        hoveredNote = note
-                        frameUpdate = true
-                    }
-                    return
-                }
-            }
-            if (hoveredNote != null) {
-                hoveredNote = null
-                frameUpdate = true
-            }
+        } else if (makingConnection) {
+            dragx = cx
+            dragy = cy
+            frameUpdate = true
         }
+        updateHover(e)
     })
 
     canvas.addEventListener("mouseup", (e) => {
+        if (makingConnection && hoveredNote != null && !removeConnection(selectedNote, hoveredNote)) {
+            selectedNote.connections.push(hoveredNote.id)
+        }
         draggingView = false
         draggingNote = false
+        makingConnection = false
         frameUpdate = true
     })
 

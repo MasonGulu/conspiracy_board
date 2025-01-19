@@ -66,7 +66,7 @@ body {
   top: 30px;
 }
 
-.canvas-container {
+#canvasContainer {
   height: calc(100% - 50px);
   width: 100%;
 }
