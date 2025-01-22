@@ -258,7 +258,7 @@ function draw() {
     for (let [key, note] of Object.entries(notes)) {
         drawNote(note)
     }
-    if (makingConnection) {
+    if (makingConnection && selectedNote) {
         let [fx, fy] = worldToScreen(selectedNote.x + selectedNote.w / 2, selectedNote.y)
         drawYarn(fx, fy, dragx, dragy)
     }
@@ -333,7 +333,7 @@ function downloadObjectAsJson(exportObj, exportName) {
 }
 
 function saveAs() {
-    projectName = prompt("File Name?")
+    projectName = prompt("Project Name?")
     if (projectName) {
         save()
     }
