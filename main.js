@@ -1,9 +1,21 @@
+/**@type {HTMLCanvasElement} */
 var canvas
 /**@type {CanvasRenderingContext2D} */
 var ctx
+/**@type {HTMLDivElement} */
 var canvasDiv
+/**@type {HTMLImageElement} */
 var backgroundImage
+/**@type {HTMLButtonElement} */
+var saveButton
+/**@type {HTMLButtonElement} */
+var saveAsButton
+/**@type {HTMLInputElement} */
+var loadFileInput
+/**@type {HTMLButtonElement} */
+var loadButton
 
+var projectName
 var notes = {}
 // relative to center of screen
 var rx = -10, ry = 0
@@ -16,9 +28,9 @@ var selectedNote
 var hoveredNote
 var dragrx = 0, dragry = 0
 var scale = 1
+var isDirty = false
 
 var frameUpdate = false
-
 
 var menuOpen = false
 const MENU_FONT = "20px Verdana"
@@ -38,7 +50,7 @@ var menuOptions = [
 const FONT_STYLE = "px Verdana"
 const FONT_SIZE = 16
 
-const BACKGROUND_SCALING = 0.2
+const BACKGROUND_SCALING = 1
 
 const NOTE_PADDING = 3
 const NOTE_PRIMARY = "#f5eb92"
@@ -160,12 +172,11 @@ function drawNote(note) {
     ctx.font = fontHeight + FONT_STYLE
     let lines = wrapText(note.label, note.w * scale)
     drawTextLines(x, y + fontHeight + PIN_SIZE * scale, lines, fontHeight, note.w * scale)
-    // ctx.fillText(note.label, x, y + fontHeight + PIN_SIZE * scale, note.w * scale)
 }
 
 function drawYarn(x1, y1, x2, y2) {
     ctx.strokeStyle = "red"
-    ctx.lineWidth = 2
+    ctx.lineWidth = 3
     ctx.beginPath()
     ctx.moveTo(x1, y1)
     ctx.lineTo(x2, y2)
@@ -267,11 +278,6 @@ function animate() {
     requestAnimationFrame(animate)
 }
 
-let a = newNote()
-let b = newNote()
-
-a.connections[0] = b.id
-
 function withinRectangle(x, y, x1, y1, w, h) {
     return x >= x1 && y >= y1 && x <= x1 + w && y <= y1 + h
 }
@@ -316,11 +322,47 @@ function removeConnection(a, b) {
     }
 }
 
+function downloadObjectAsJson(exportObj, exportName) {
+    var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
+    var downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", exportName + ".board");
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
+function saveAs() {
+    projectName = prompt("File Name?")
+    if (projectName) {
+        save()
+    }
+}
+
+function save() {
+    if (!projectName) {
+        return saveAs()
+    }
+    downloadObjectAsJson(notes, projectName)
+    isDirty = false
+}
+
+function onLoad(e) {
+    let lines = e.target.result
+    notes = JSON.parse(lines)
+    frameUpdate = true
+    isDirty = false
+}
+
 window.onload = function () {
     canvas = document.getElementById("mainCanvas")
     canvasDiv = document.getElementById("canvasContainer")
     ctx = canvas.getContext("2d")
     backgroundImage = document.getElementById("backgroundImage")
+    saveButton = document.getElementById("saveButton")
+    saveAsButton = document.getElementById("saveAsButton")
+    loadFileInput = document.getElementById("loadFileInput")
+    loadButton = document.getElementById("loadButton")
     draw()
 
     canvas.addEventListener("wheel", function (e) {
@@ -333,6 +375,23 @@ window.onload = function () {
         }
         scale = Math.max(0.4, Math.min(2, scale))
         draw()
+    })
+
+    loadFileInput.addEventListener("change", (e) => {
+        fn = e.target.files[0]
+        if (fn) {
+            fr = new FileReader()
+            fr.onload = onLoad
+            fr.readAsText(fn)
+            fns = fn.name
+            projectName = fns.slice(0, -6)
+        }
+    })
+
+    saveButton.addEventListener("click", save)
+    saveAsButton.addEventListener("click", saveAs)
+    loadButton.addEventListener("click", (e) => {
+        loadFileInput.click()
     })
 
     canvas.addEventListener("mousedown", (e) => {
@@ -384,6 +443,9 @@ window.onload = function () {
         if (makingConnection && hoveredNote != null && !removeConnection(selectedNote, hoveredNote)) {
             selectedNote.connections.push(hoveredNote.id)
         }
+        if (draggingNote || makingConnection) {
+            isDirty = true
+        }
         draggingView = false
         draggingNote = false
         makingConnection = false
@@ -395,8 +457,9 @@ window.onload = function () {
     })
 
     document.getElementById("insertNoteButton").onclick = function () {
-        notes[notes.length] = newNote()
+        newNote()
         frameUpdate = true
+        isDirty = true
     }
 
     document.getElementById("labelButton").onclick = function () {
@@ -404,8 +467,18 @@ window.onload = function () {
             let nlabel = window.prompt("Note Label", selectedNote.label)
             selectedNote.label = nlabel
             frameUpdate = true
+            isDirty = true
         }
     }
+
+    window.addEventListener("beforeunload", function (e) {
+        if (!isDirty) {
+            return undefined;
+        }
+
+        var confirmationMessage = 'If you leave before saving, your changes will be lost.'
+        return confirmationMessage
+    });
 
     requestAnimationFrame(animate)
 }

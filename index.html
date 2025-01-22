@@ -11,8 +11,9 @@
     <div class="menu-item">
       <a href="#">File</a>
       <div class="dropdown">
-        <a href="#" id="openButton">Open</a>
+        <a href="#" id="loadButton">Open</a>
         <a href="#" id="saveButton">Save</a>
+        <a href="#" id="saveAsButton">Save As</a>
       </div>
     </div>
     <div class="menu-item">
@@ -31,5 +32,6 @@
   <div id="canvasContainer">
     <canvas id="mainCanvas"></canvas>
   </div>
-  <img src="cork.jpg" id="backgroundImage" hidden="true">
+  <img src="backgrounds/noise.png" id="backgroundImage" hidden="true">
+  <input type="file" hidden="true" id="loadFileInput" accept=".board">
 </body>
