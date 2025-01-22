@@ -47,7 +47,7 @@ var menuOptions = [
     }
 ]
 
-const FONT_STYLE = "px Verdana"
+const FONT_STYLE = "px Verdana, sans-sarif"
 const FONT_SIZE = 16
 
 const BACKGROUND_SCALING = 1
